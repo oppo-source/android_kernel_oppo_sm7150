@@ -61,7 +61,10 @@
 #include <asm/system_misc.h>
 #include <soc/qcom/minidump.h>
 
+#ifndef VENDOR_EDIT
+//zhangzongyu@BSP.Kenel.stability,Qcom patch , CR#2627657
 #include <soc/qcom/scm.h>
+#endif
 #include <soc/qcom/lpm_levels.h>
 
 #define CREATE_TRACE_POINTS
@@ -414,7 +417,10 @@ void __init smp_cpus_done(unsigned int max_cpus)
 	setup_cpu_features();
 	hyp_mode_check();
 	apply_alternatives_all();
+#ifndef VENDOR_EDIT
+//zhangzongyu@BSP.Kenel.stability,Qcom patch , CR#2627657
 	scm_enable_mem_protection();
+#endif
 	mark_linear_text_alias_ro();
 }
 

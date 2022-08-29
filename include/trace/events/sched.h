@@ -1260,6 +1260,42 @@ TRACE_EVENT_CONDITION(sched_overutilized,
 		__entry->overutilized ? 1 : 0, __entry->cpulist)
 );
 
+#ifdef OPLUS_FEATURE_PREFER_SILVER
+TRACE_EVENT(sched_cpu_skip,
+
+	TP_PROTO(struct task_struct *p, bool sysctl_prefer_silver, bool is_ux_task, bool check_freq, bool check_task_util, bool check_cpu_util, int start_cpu),
+
+	TP_ARGS(p, sysctl_prefer_silver, is_ux_task, check_freq, check_task_util, check_cpu_util, start_cpu),
+
+	TP_STRUCT__entry(
+		__field(int,    pid)
+		__array(char,   comm, TASK_COMM_LEN)
+		__field(bool,   sysctl_prefer_silver)
+		__field(bool,   is_ux_task)
+		__field(bool,   check_freq)
+		__field(bool,   check_task_util)
+		__field(bool,   check_cpu_util)
+		__field(int,    start_cpu)
+	),
+
+	TP_fast_assign(
+		__entry->pid                    = p ? p->pid : -1;
+		memcpy(__entry->comm, p ? p->comm:"NULL", TASK_COMM_LEN);
+		__entry->sysctl_prefer_silver   = sysctl_prefer_silver;
+		__entry->is_ux_task             = is_ux_task;
+		__entry->check_freq             = check_freq;
+		__entry->check_task_util        = check_task_util;
+		__entry->check_cpu_util         = check_cpu_util;
+		__entry->start_cpu              = start_cpu;
+	),
+
+	TP_printk("pid=%d comm=%s prefer_silver_enabled=%d is_ux_task=%d check_freq=%d check_task_util=%d check_cpu_util=%d start_cpu=%d",
+		__entry->pid, __entry->comm, __entry->sysctl_prefer_silver,
+		__entry->is_ux_task, __entry->check_freq,
+		__entry->check_task_util, __entry->check_cpu_util, __entry->start_cpu)
+);
+#endif /* OPLUS_FEATURE_PREFER_SILVER */
+
 /*
  * Tracepoint for find_best_target
  */

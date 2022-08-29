@@ -34,6 +34,9 @@
 #include <soc/qcom/socinfo.h>
 #include <linux/soc/qcom/smem.h>
 #include <soc/qcom/boot_stats.h>
+#ifdef OPLUS_ARCH_EXTENDS
+#include <soc/oplus/system/oppo_project.h>
+#endif
 
 #define BUILD_ID_LENGTH 32
 #define CHIP_ID_LENGTH 32
@@ -289,6 +292,10 @@ static union {
 
 /* max socinfo format version supported */
 #define MAX_SOCINFO_FORMAT SOCINFO_VERSION(0, 15)
+#ifdef OPLUS_ARCH_EXTENDS
+static char *fake_cpu_id = "SDM660";
+static char *real_cpu_id = "SDM720G";
+#endif
 
 static struct msm_soc_info cpu_of_id[] = {
 	[0]  = {MSM_CPU_UNKNOWN, "Unknown CPU"},
@@ -411,7 +418,12 @@ static struct msm_soc_info cpu_of_id[] = {
 	[418] = {SDX_CPU_SDXPRAIRIE, "SDXPRAIRIE"},
 
 	/* sdmmagpie ID */
-	[365] = {MSM_CPU_SDMMAGPIE, "SDMMAGPIE"},
+#if defined(OPLUS_BUG_STABILITY) && defined(CONFIG_CONFIDENTIAL_VERSION)
+	[365] = {MSM_CPU_SDMMAGPIE, "SDM710"},
+#else
+	/* sdmmagpie ID */
+	[365] = {MSM_CPU_SDMMAGPIE, "SDM730G AIE"},
+#endif
 
 	/* sdmmagpiep ID */
 	[366] = {MSM_CPU_SDMMAGPIEP, "SDMMAGPIEP"},
@@ -507,7 +519,11 @@ static char *msm_read_hardware_id(void)
 		goto err_path;
 	if (!cpu_of_id[socinfo->v0_1.id].soc_id_string)
 		goto err_path;
-
+#ifdef OPLUS_BUG_STABILITY
+	if((get_project() == 19031) || (get_project() == 19111)|| (get_project() == 19331))
+		socinfo->v0_1.id = 365;
+	pr_err("socinfo->v0_1.id=%d\n",socinfo->v0_1.id);
+#endif//OPLUS_BUG_STABILITY
 	ret = strlcat(msm_soc_str, cpu_of_id[socinfo->v0_1.id].soc_id_string,
 			sizeof(msm_soc_str));
 	if (ret > sizeof(msm_soc_str))
@@ -1840,6 +1856,20 @@ int __init socinfo_init(void)
 		pr_warn("New IDs added! ID => CPU mapping needs an update.\n");
 
 	cur_cpu = cpu_of_id[socinfo->v0_1.id].generic_soc_type;
+#ifdef OPLUS_ARCH_EXTENDS
+	if (is_confidential()) {
+		cpu_of_id[socinfo->v0_1.id].soc_id_string = fake_cpu_id;
+	} else {
+		cpu_of_id[socinfo->v0_1.id].soc_id_string = real_cpu_id;
+	}
+#endif
+#ifdef CONFIG_ARCH_SDMMAGPIE
+	if((get_project() == 19031) || (get_project() == 19111)|| (get_project() == 19331))
+		{
+			cpu_of_id[socinfo->v0_1.id].generic_soc_type = MSM_CPU_SDMMAGPIE;
+			cpu_of_id[socinfo->v0_1.id].soc_id_string = "SDM730G AIE";
+		}
+#endif
 	boot_stats_init();
 	socinfo_print();
 	arch_read_hardware_id = msm_read_hardware_id;

@@ -287,8 +287,6 @@ static int dsi_ctrl_check_state(struct dsi_ctrl *dsi_ctrl,
 	int rc = 0;
 	struct dsi_ctrl_state_info *state = &dsi_ctrl->current_state;
 
-	SDE_EVT32(dsi_ctrl->cell_index, op);
-
 	switch (op) {
 	case DSI_CTRL_OP_POWER_STATE_CHANGE:
 		if (state->power_state == op_state) {
@@ -1098,6 +1096,7 @@ void dsi_message_setup_tx_mode(struct dsi_ctrl *dsi_ctrl,
 	/* Check to see if cmd len plus header is greater than fifo size */
 	if ((cmd_len + 4) > DSI_EMBEDDED_MODE_DMA_MAX_SIZE_BYTES) {
 		*flags |= DSI_CTRL_CMD_NON_EMBEDDED_MODE;
+		SDE_EVT32(cmd_len, flags);
 		pr_debug("[%s] override to non-embedded mode,cmd len =%d\n",
 				dsi_ctrl->name, cmd_len);
 		return;
@@ -1173,7 +1172,7 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 		rc = -ENOTSUPP;
 		goto error;
 	}
-
+	SDE_EVT32(0x100, flags);
 	if (flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
 		cmd_mem.offset = dsi_ctrl->cmd_buffer_iova;
 		cmd_mem.en_broadcast = (flags & DSI_CTRL_CMD_BROADCAST) ?
@@ -1248,6 +1247,7 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 				  true : false;
 	}
 
+	SDE_EVT32(cmd_mem.offset, cmd_mem.length, flags, msg->flags);
 kickoff:
 	/* check if custom dma scheduling line needed */
 	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
@@ -1357,10 +1357,12 @@ kickoff:
 		 * result in smmu write faults with DSI as client.
 		 */
 		if (flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
+			SDE_EVT32(0x500);
 			dsi_hw_ops.soft_reset(&dsi_ctrl->hw);
 			dsi_ctrl->cmd_len = 0;
 		}
 	}
+	SDE_EVT32(0x200);
 error:
 	if (buffer)
 		devm_kfree(&dsi_ctrl->pdev->dev, buffer);
@@ -1671,7 +1673,7 @@ static int dsi_ctrl_buffer_deinit(struct dsi_ctrl *dsi_ctrl)
 			pr_err("failed to get address space\n");
 			return -ENOMEM;
 		}
-
+		SDE_EVT32(dsi_ctrl->tx_cmd_buf);
 		msm_gem_put_iova(dsi_ctrl->tx_cmd_buf, aspace);
 
 		mutex_lock(&dsi_ctrl->drm_dev->struct_mutex);
@@ -2359,7 +2361,7 @@ static bool dsi_ctrl_check_for_spurious_error_interrupts(
 	}
 	return false;
 }
-
+bool dump_in_progress = false;
 static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 				unsigned long int error)
 {
@@ -2397,7 +2399,11 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 							0, 0, 0, 0);
 			}
 		}
+		#ifndef OPLUS_BUG_STABILITY
 		pr_err("tx timeout error: 0x%lx\n", error);
+		#else /* OPLUS_BUG_STABILITY */
+		pr_err_ratelimited("tx timeout error: 0x%lx\n", error);
+		#endif /* OPLUS_BUG_STABILITY */
 	}
 
 	/* DSI FIFO OVERFLOW error */
@@ -2427,6 +2433,11 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 						0, 0, 0, 0);
 		}
 		pr_err("dsi FIFO UNDERFLOW error: 0x%lx\n", error);
+		if (!dump_in_progress) {
+			dump_in_progress = true;
+			SDE_EVT32(0x8888);
+			SDE_DBG_DUMP_WQ("all", "dbg_bus", "vbif_dbg_bus", "dsi_dbg_bus");
+		}
 	}
 
 	/* DSI PLL UNLOCK error */
@@ -2446,6 +2457,7 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	 */
 	if (dsi_ctrl_check_for_spurious_error_interrupts(dsi_ctrl) &&
 				dsi_ctrl->esd_check_underway) {
+		SDE_EVT32(0x500);
 		dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
 		return;
 	}
@@ -2830,7 +2842,7 @@ int dsi_ctrl_soft_reset(struct dsi_ctrl *dsi_ctrl)
 {
 	if (!dsi_ctrl)
 		return -EINVAL;
-
+	SDE_EVT32(dsi_ctrl->cell_index);
 	mutex_lock(&dsi_ctrl->ctrl_lock);
 	dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
@@ -3088,7 +3100,7 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 	/* Dont trigger the command if this is not the last ocmmand */
 	if (!(flags & DSI_CTRL_CMD_LAST_COMMAND))
 		return rc;
-
+	SDE_EVT32(flags, dsi_ctrl->cell_index);
 	mutex_lock(&dsi_ctrl->ctrl_lock);
 
 	if (!(flags & DSI_CTRL_CMD_BROADCAST_MASTER))
@@ -3138,12 +3150,13 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 					BIT(DSI_FIFO_OVERFLOW), false);
 
 		if (flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
+			SDE_EVT32(0x500);
 			dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
 			dsi_ctrl->cmd_len = 0;
 		}
 	}
-
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
+	SDE_EVT32(0x300, flags, dsi_ctrl->cell_index);
 	return rc;
 }
 
@@ -3447,8 +3460,10 @@ int dsi_ctrl_set_vid_engine_state(struct dsi_ctrl *dsi_ctrl,
 	dsi_ctrl->hw.ops.video_engine_en(&dsi_ctrl->hw, on);
 
 	/* perform a reset when turning off video engine */
-	if (!on)
+	if (!on){
+		SDE_EVT32(0x500);
 		dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
+	}
 
 	pr_debug("[DSI_%d] Set video engine state = %d\n", dsi_ctrl->cell_index,
 		 state);

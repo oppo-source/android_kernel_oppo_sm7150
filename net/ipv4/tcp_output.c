@@ -41,6 +41,10 @@
 #include <linux/compiler.h>
 #include <linux/gfp.h>
 #include <linux/module.h>
+//#ifdef VENDOR_EDIT
+//Add for TCP Retransmit info send to user space.
+#include <net/oplus/oplus_kernel2user.h>
+//#endif /* VENDOR_EDIT */
 
 /* People can turn this off for buggy TCP's found in printers etc. */
 int sysctl_tcp_retrans_collapse __read_mostly = 1;
@@ -61,6 +65,21 @@ int sysctl_tcp_tso_win_divisor __read_mostly = 3;
 
 /* By default, RFC2861 behavior.  */
 int sysctl_tcp_slow_start_after_idle __read_mostly = 1;
+
+#ifdef OPLUS_FEATURE_MODEM_DATA_NWPOWER
+/*
+*Add for classify glink wakeup services
+*/
+#include <net/oplus_nwpower.h>
+extern atomic_t oplus_tcp_is_input;
+extern atomic_t ipa_wakeup_hook_boot;
+extern struct timespec oplus_tcp_last_transmission_stamp;
+extern struct work_struct oplus_tcp_output_hook_work;
+extern struct oplus_tcp_hook_struct oplus_tcp_output_hook;
+extern atomic_t tcpsynretrans_hook_boot;
+extern struct work_struct oplus_tcp_output_tcpsynretrans_hook_work;
+extern struct oplus_tcp_hook_struct oplus_tcp_output_tcpsynretrans_hook;
+#endif /* OPLUS_FEATURE_MODEM_DATA_NWPOWER */
 
 static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			   int push_one, gfp_t gfp);
@@ -1003,6 +1022,12 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	struct tcp_md5sig_key *md5;
 	struct tcphdr *th;
 	int err;
+#ifdef OPLUS_FEATURE_MODEM_DATA_NWPOWER
+        /*
+        *Add for classify glink wakeup services
+		*/
+        struct timespec now_ts;
+#endif /* OPLUS_FEATURE_MODEM_DATA_NWPOWER */
 
 	BUG_ON(!skb || !tcp_skb_pcount(skb));
 	tp = tcp_sk(sk);
@@ -1117,6 +1142,10 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 			      tcp_skb_pcount(skb));
 
 	tp->segs_out += tcp_skb_pcount(skb);
+	//#ifdef VENDOR_EDIT
+	//Add for TCP Retransmit info send to user space.
+	oppo_handle_retransmit(sk, 0);
+	//#endif /* VENDOR_EDIT */
 	/* OK, its time to fill skb_shinfo(skb)->gso_{segs|size} */
 	skb_shinfo(skb)->gso_segs = tcp_skb_pcount(skb);
 	skb_shinfo(skb)->gso_size = tcp_skb_mss(skb);
@@ -1129,6 +1158,44 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 			       sizeof(struct inet6_skb_parm)));
 
 	err = icsk->icsk_af_ops->queue_xmit(sk, skb, &inet->cork.fl);
+
+#ifdef OPLUS_FEATURE_MODEM_DATA_NWPOWER
+    /*
+    *Add for classify glink wakeup services.
+    */
+    if (atomic_read(&ipa_wakeup_hook_boot) == 1) {
+        if (atomic_read(&oplus_tcp_is_input) == 0) {
+            now_ts = current_kernel_time();
+
+            if (((now_ts.tv_sec * 1000 + now_ts.tv_nsec / 1000000) -
+                (oplus_tcp_last_transmission_stamp.tv_sec * 1000 +
+                    oplus_tcp_last_transmission_stamp.tv_nsec / 1000000)) > OPLUS_TRANSMISSION_INTERVAL) {
+                atomic_set(&oplus_tcp_is_input, 3);
+
+                if (sk->sk_v6_daddr.s6_addr32[0] == 0 && sk->sk_v6_daddr.s6_addr32[1] == 0) {
+                    oplus_tcp_output_hook.ipv4_addr = sk->sk_daddr;
+                    oplus_tcp_output_hook.is_ipv6 = false;
+                    schedule_work(&oplus_tcp_output_hook_work);
+                } else {
+                    oplus_tcp_output_hook.ipv6_addr1 = (u64)ntohl(sk->sk_v6_daddr.s6_addr32[0]) << 32
+                        | ntohl(sk->sk_v6_daddr.s6_addr32[1]);
+                    oplus_tcp_output_hook.ipv6_addr2 = (u64)ntohl(sk->sk_v6_daddr.s6_addr32[2]) << 32
+                        | ntohl(sk->sk_v6_daddr.s6_addr32[3]);
+                    oplus_tcp_output_hook.is_ipv6 = true;
+                    schedule_work(&oplus_tcp_output_hook_work);
+                }
+
+                oplus_tcp_output_hook.uid = from_kuid_munged(&init_user_ns, sk->sk_uid);
+                oplus_tcp_output_hook.pid = sk->sk_oplus_pid;
+            }
+        }
+
+        oplus_tcp_last_transmission_stamp = current_kernel_time();
+        sk->oplus_last_send_stamp[0] = sk->oplus_last_send_stamp[1];
+        sk->oplus_last_send_stamp[1] = oplus_tcp_last_transmission_stamp.tv_sec * 1000 +
+            oplus_tcp_last_transmission_stamp.tv_nsec / 1000000;
+    }
+#endif /* OPLUS_FEATURE_MODEM_DATA_NWPOWER */
 
 	if (unlikely(err > 0)) {
 		tcp_enter_cwr(sk);
@@ -2851,7 +2918,17 @@ int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int cur_mss;
 	int diff, len, err;
+#ifdef OPLUS_FEATURE_MODEM_DATA_NWPOWER
+        /*
+        *Add for classify glink wakeup services
+        */
+        struct timespec now_ts;
+#endif /* OPLUS_FEATURE_MODEM_DATA_NWPOWER */
 
+	//#ifdef VENDOR_EDIT
+	//Add for TCP Retransmit info send to user space.
+	oppo_handle_retransmit(sk, 1);
+	//#endif /* VENDOR_EDIT */
 
 	/* Inconclusive MTU probe */
 	if (icsk->icsk_mtup.probe_size)
@@ -2938,8 +3015,35 @@ int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 		err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
 	}
 
+	//#ifdef VENDOR_EDIT
+	//Add for TCP Retransmit info send to user space.
+	oppo_handle_retransmit(sk, -1); // in this function, tcp_transmit_skb is called again.
+	//#endif /* VENDOR_EDIT */
+
 	if (likely(!err)) {
 		TCP_SKB_CB(skb)->sacked |= TCPCB_EVER_RETRANS;
+#ifdef OPLUS_FEATURE_MODEM_DATA_NWPOWER
+        /*
+        *Add for classify glink wakeup services
+        */
+        if (atomic_read(&tcpsynretrans_hook_boot) == 1) {
+            now_ts = current_kernel_time();
+            if (((now_ts.tv_sec * 1000 + now_ts.tv_nsec / 1000000) - sk->oplus_last_send_stamp[0]) > OPLUS_TCP_RETRANSMISSION_INTERVAL) {
+                if (sk->sk_v6_daddr.s6_addr32[0] == 0 && sk->sk_v6_daddr.s6_addr32[1] == 0) {
+                    oplus_tcp_output_tcpsynretrans_hook.ipv4_addr = sk->sk_daddr;
+                    oplus_tcp_output_tcpsynretrans_hook.is_ipv6 = false;
+                    schedule_work(&oplus_tcp_output_tcpsynretrans_hook_work);
+                } else {
+                    oplus_tcp_output_tcpsynretrans_hook.ipv6_addr1 = (u64)ntohl(sk->sk_v6_daddr.s6_addr32[0]) << 32 | ntohl(sk->sk_v6_daddr.s6_addr32[1]);
+                    oplus_tcp_output_tcpsynretrans_hook.ipv6_addr2 = (u64)ntohl(sk->sk_v6_daddr.s6_addr32[2]) << 32 | ntohl(sk->sk_v6_daddr.s6_addr32[3]);
+                    oplus_tcp_output_tcpsynretrans_hook.is_ipv6 = true;
+                    schedule_work(&oplus_tcp_output_tcpsynretrans_hook_work);
+                }
+                oplus_tcp_output_tcpsynretrans_hook.uid = from_kuid_munged(&init_user_ns, sk->sk_uid);
+                oplus_tcp_output_tcpsynretrans_hook.pid = sk->sk_oplus_pid;
+            }
+        }
+#endif /* OPLUS_FEATURE_MODEM_DATA_NWPOWER */
 	} else if (err != -EBUSY) {
 		NET_ADD_STATS(sock_net(sk), LINUX_MIB_TCPRETRANSFAIL, segs);
 	}
@@ -3276,6 +3380,11 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	tcp_options_write((__be32 *)(th + 1), NULL, &opts);
 	th->doff = (tcp_header_size >> 2);
 	__TCP_INC_STATS(sock_net(sk), TCP_MIB_OUTSEGS);
+
+	//#ifdef VENDOR_EDIT
+	//Add for TCP Retransmit info send to user space.
+	oppo_handle_retransmit(sk, 0);
+	//#endif /* VENDOR_EDIT */
 
 #ifdef CONFIG_TCP_MD5SIG
 	/* Okay, we have all we need - do the md5 hash if needed */
@@ -3783,6 +3892,12 @@ int tcp_rtx_synack(const struct sock *sk, struct request_sock *req)
 	res = af_ops->send_synack(sk, NULL, &fl, req, NULL, TCP_SYNACK_NORMAL);
 	if (!res) {
 		__TCP_INC_STATS(sock_net(sk), TCP_MIB_RETRANSSEGS);
+
+		//#ifdef VENDOR_EDIT
+		//Add for TCP Retransmit info send to user space.
+		oppo_handle_retransmit(sk, 1);
+		//#endif /* VENDOR_EDIT */
+
 		__NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPSYNRETRANS);
 		if (unlikely(tcp_passive_fastopen(sk)))
 			tcp_sk(sk)->total_retrans++;
