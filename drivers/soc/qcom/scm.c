@@ -1277,7 +1277,12 @@ EXPORT_SYMBOL(scm_is_secure_device);
  */
 #define TZ_RTIC_ENABLE_MEM_PROTECTION	0x4
 #if IS_ENABLED(CONFIG_QCOM_QHEE_ENABLE_MEM_PROTECTION)
+#ifdef VENDOR_EDIT
+//zhangzongyu@BSP.Kenel.stability,Qcom patch , CR#2627657
+static int __init scm_mem_protection_init(void)
+#else
 int scm_enable_mem_protection(void)
+#endif
 {
 	struct scm_desc desc = {0};
 	int ret = 0, resp;
@@ -1307,10 +1312,17 @@ int scm_enable_mem_protection(void)
 
 	return resp;
 }
-#else
-inline int scm_enable_mem_protection(void)
-{
-	return 0;
-}
+#ifdef VENDOR_EDIT
+//zhangzongyu@BSP.Kenel.stability,Qcom patch , CR#2627657
+//#else
+//inline int scm_enable_mem_protection(void)
+//{
+//	return 0;
+//}
+early_initcall(scm_mem_protection_init);
 #endif
+#endif
+#ifndef VENDOR_EDIT
+//zhangzongyu@BSP.Kenel.stability,Qcom patch , CR#2627657
 EXPORT_SYMBOL(scm_enable_mem_protection);
+#endif

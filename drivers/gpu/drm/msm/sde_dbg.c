@@ -28,9 +28,9 @@
 #define SDE_DBG_BASE_MAX		10
 
 #define DEFAULT_PANIC		1
-#define DEFAULT_REGDUMP		SDE_DBG_DUMP_IN_MEM
-#define DEFAULT_DBGBUS_SDE	SDE_DBG_DUMP_IN_MEM
-#define DEFAULT_DBGBUS_VBIFRT	SDE_DBG_DUMP_IN_MEM
+#define DEFAULT_REGDUMP		(SDE_DBG_DUMP_IN_MEM | SDE_DBG_DUMP_IN_LOG)
+#define DEFAULT_DBGBUS_SDE	(SDE_DBG_DUMP_IN_MEM | SDE_DBG_DUMP_IN_LOG)
+#define DEFAULT_DBGBUS_VBIFRT	(SDE_DBG_DUMP_IN_MEM | SDE_DBG_DUMP_IN_LOG)
 #define DEFAULT_BASE_REG_CNT	0x100
 #define GROUP_BYTES		4
 #define ROW_BYTES		16
@@ -3427,14 +3427,13 @@ static void _sde_dump_reg(const char *dump_name, u32 reg_dump_flag,
 	in_log = (reg_dump_flag & SDE_DBG_DUMP_IN_LOG);
 	in_mem = (reg_dump_flag & SDE_DBG_DUMP_IN_MEM);
 
-	pr_debug("%s: reg_dump_flag=%d in_log=%d in_mem=%d\n",
+	pr_err("%s: reg_dump_flag=%d in_log=%d in_mem=%d\n",
 		dump_name, reg_dump_flag, in_log, in_mem);
 
 	if (!in_log && !in_mem)
 		return;
 
-	if (in_log)
-		dev_info(sde_dbg_base.dev, "%s: start_offset 0x%lx len 0x%zx\n",
+	dev_err(sde_dbg_base.dev, "%s: start_offset 0x%lx len 0x%zx\n",
 				dump_name, (unsigned long)(addr - base_addr),
 					len_bytes);
 
@@ -3451,8 +3450,8 @@ static void _sde_dump_reg(const char *dump_name, u32 reg_dump_flag,
 
 		if (dump_mem && *dump_mem) {
 			dump_addr = *dump_mem;
-			dev_dbg(sde_dbg_base.dev,
-				"%s: start_addr:0x%pK len:0x%x reg_offset=0x%lx\n",
+			dev_err(sde_dbg_base.dev,
+				"%s: start_addr:0x%p len:0x%x reg_offset=0x%lx\n",
 				dump_name, dump_addr, len_padded,
 				(unsigned long)(addr - base_addr));
 		} else {
@@ -3477,11 +3476,10 @@ static void _sde_dump_reg(const char *dump_name, u32 reg_dump_flag,
 		x8 = (addr + 0x8 < end_addr) ? readl_relaxed(addr + 0x8) : 0;
 		xc = (addr + 0xc < end_addr) ? readl_relaxed(addr + 0xc) : 0;
 
-		if (in_log)
-			dev_info(sde_dbg_base.dev,
-					"0x%lx : %08x %08x %08x %08x\n",
-					(unsigned long)(addr - base_addr),
-					x0, x4, x8, xc);
+		dev_err(sde_dbg_base.dev,
+				"0x%lx : %08x %08x %08x %08x\n",
+				(unsigned long)(addr - base_addr),
+				x0, x4, x8, xc);
 
 		if (dump_addr) {
 			dump_addr[i * 4] = x0;
@@ -3593,7 +3591,7 @@ static void _sde_dump_reg_by_ranges(struct sde_dbg_reg_base *dbg,
 				range_node->range_name))
 				continue;
 
-			pr_debug("%s: range_base=0x%pK start=0x%x end=0x%x\n",
+			pr_err("%s: range_base=0x%p start=0x%x end=0x%x\n",
 				range_node->range_name,
 				addr, range_node->offset.start,
 				range_node->offset.end);
@@ -3605,9 +3603,9 @@ static void _sde_dump_reg_by_ranges(struct sde_dbg_reg_base *dbg,
 	} else {
 		/* If there is no list to dump ranges, dump all registers */
 		if (in_log) {
-			dev_info(sde_dbg_base.dev,
+			dev_err(sde_dbg_base.dev,
 				"Ranges not found, will dump full registers\n");
-			dev_info(sde_dbg_base.dev, "base:0x%pK len:0x%zx\n",
+			dev_err(sde_dbg_base.dev, "base:0x%p len:0x%zx\n",
 				dbg->base, dbg->max_offset);
 		}
 		addr = dbg->base;
@@ -3721,7 +3719,7 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 	if (!in_log && !in_mem)
 		return;
 
-	dev_info(sde_dbg_base.dev, "======== start %s dump =========\n",
+	dev_err(sde_dbg_base.dev, "======== start %s dump =========\n",
 			bus->cmn.name);
 
 	if (in_mem) {
@@ -3732,8 +3730,8 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
 			if (in_log)
-				dev_info(sde_dbg_base.dev,
-					"%s: start_addr:0x%pK len:0x%x\n",
+				dev_err(sde_dbg_base.dev,
+					"%s: start_addr:0x%p len:0x%x\n",
 					__func__, dump_addr, list_size);
 		} else {
 			in_mem = false;
@@ -3767,7 +3765,7 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 		status = readl_relaxed(mem_base + offset);
 
 		if (in_log)
-			dev_info(sde_dbg_base.dev,
+			dev_err(sde_dbg_base.dev,
 					"waddr=0x%x blk=%d tst=%d val=0x%x\n",
 					head->wr_addr, head->block_id,
 					head->test_id, status);
@@ -3792,7 +3790,7 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 	if (_sde_power_check(sde_dbg_base.dump_mode))
 		_sde_dbg_enable_power(false);
 
-	dev_info(sde_dbg_base.dev, "======== end %s dump =========\n",
+	dev_err(sde_dbg_base.dev, "======== end %s dump =========\n",
 			bus->cmn.name);
 }
 
@@ -3823,7 +3821,7 @@ static void _sde_dbg_dump_vbif_debug_bus_entry(
 				*dump_addr++ = val;
 			}
 			if (in_log)
-				dev_info(sde_dbg_base.dev,
+				dev_err(sde_dbg_base.dev,
 					"testpoint:%x arb/xin id=%d index=%d val=0x%x\n",
 					head->block_bus_addr, i, j, val);
 		}
@@ -3865,7 +3863,7 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 	list_size = bus->cmn.entries_size;
 	dump_mem = &bus->cmn.dumped_content;
 
-	dev_info(sde_dbg_base.dev, "======== start %s dump =========\n",
+	dev_err(sde_dbg_base.dev, "======== start %s dump =========\n",
 			bus->cmn.name);
 
 	if (!dump_mem || !dbg_bus || !bus_size || !list_size)
@@ -3894,8 +3892,8 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 		if (*dump_mem) {
 			dump_addr = *dump_mem;
 			if (in_log)
-				dev_info(sde_dbg_base.dev,
-					"%s: start_addr:0x%pK len:0x%x\n",
+				dev_err(sde_dbg_base.dev,
+					"%s: start_addr:0x%p len:0x%x\n",
 					__func__, dump_addr, list_size);
 		} else {
 			in_mem = false;
@@ -3964,7 +3962,7 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 	if (_sde_power_check(sde_dbg_base.dump_mode))
 		_sde_dbg_enable_power(false);
 
-	dev_info(sde_dbg_base.dev, "======== end %s dump =========\n",
+	dev_err(sde_dbg_base.dev, "======== end %s dump =========\n",
 			bus->cmn.name);
 }
 
@@ -3985,8 +3983,7 @@ static void _sde_dump_array(struct sde_dbg_reg_base *blk_arr[],
 
 	mutex_lock(&sde_dbg_base.mutex);
 
-	if (dump_all)
-		sde_evtlog_dump_all(sde_dbg_base.evtlog);
+	sde_evtlog_dump_all(sde_dbg_base.evtlog);
 
 	if (dump_all || !blk_arr || !len) {
 		_sde_dump_reg_all(dump_secure);

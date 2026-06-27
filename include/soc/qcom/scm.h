@@ -114,7 +114,10 @@ extern int scm_restore_sec_cfg(u32 device_id, u32 spare, int *scm_ret);
 extern u32 scm_io_read(phys_addr_t address);
 extern int scm_io_write(phys_addr_t address, u32 val);
 extern bool scm_is_secure_device(void);
+#ifndef VENDOR_EDIT
+//zhangzongyu@BSP.Kenel.stability,Qcom patch , CR#2627657
 extern int scm_enable_mem_protection(void);
+#endif
 
 #define SCM_HDCP_MAX_REG 5
 
@@ -182,10 +185,13 @@ static inline bool scm_is_secure_device(void)
 	return false;
 }
 
+#ifndef VENDOR_EDIT
+//zhangzongyu@BSP.Kenel.stability,Qcom patch , CR#2627657
 static inline int scm_enable_mem_protection(void)
 {
 	return 0;
 }
+#endif
 #endif
 
 #if defined(CONFIG_QCOM_SCM)

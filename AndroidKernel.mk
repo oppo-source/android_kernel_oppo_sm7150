@@ -91,6 +91,7 @@ endif
 
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
+TARGET_KERNEL_VERSION := 4.14
 TARGET_KERNEL := msm-$(TARGET_KERNEL_VERSION)
 ifeq ($(TARGET_KERNEL),$(current_dir))
     # New style, kernel/msm-version
@@ -107,6 +108,13 @@ else
     KERNEL_OUT := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ
 endif
 
+
+$(warning "Using TARGET_KERNEL_VERSION" $(TARGET_KERNEL_VERSION))
+$(warning "Using TARGET_KERNEL" $(TARGET_KERNEL))
+$(warning "Using TARGET_KERNEL_SOURCE" $(TARGET_KERNEL_SOURCE))
+$(warning "Using TARGET_OUT_INTERMEDIATES" $(TARGET_OUT_INTERMEDIATES))
+$(warning "Using KERNEL_SYMLINK" $(KERNEL_SYMLINK))
+$(warning "Using KERNEL_USR" $(KERNEL_USR))
 # Add RTIC DTB to dtb.img if RTIC MPGen is enabled.
 # Note: unfortunately we can't define RTIC DTS + DTB rule here as the
 # following variable/ tools (needed for DTS generation)
@@ -248,9 +256,9 @@ $(RTIC_DTB): $(INSTALLED_KERNEL_TARGET)
 # Creating a dtb.img once the kernel is compiled if TARGET_KERNEL_APPEND_DTB is set to be false
 $(INSTALLED_DTBIMAGE_TARGET): $(TARGET_PREBUILT_INT_KERNEL) $(INSTALLED_KERNEL_TARGET) $(RTIC_DTB)
 	$(hide) if [ -d "$(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts/vendor/" ]; then \
-			cat $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts/vendor/qcom/*.dtb $(RTIC_DTB) > $@; \
+			cat $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts/vendor/*/*.dtb $(RTIC_DTB) > $@; \
 		else \
-			cat $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts/qcom/*.dtb $(RTIC_DTB) > $@; \
+			cat $(KERNEL_OUT)/arch/$(KERNEL_ARCH)/boot/dts/*/*.dtb $(RTIC_DTB) > $@; \
 		fi
 
 .PHONY: kerneltags

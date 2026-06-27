@@ -195,7 +195,7 @@ void sde_evtlog_dump_all(struct sde_dbg_evtlog *evtlog)
 
 	while (sde_evtlog_dump_to_buffer(evtlog, buf, sizeof(buf),
 				update_last_entry, false)) {
-		pr_info("%s", buf);
+		pr_err("%s", buf);
 		update_last_entry = false;
 	}
 }

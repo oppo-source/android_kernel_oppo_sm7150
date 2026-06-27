@@ -88,3 +88,25 @@ obj-$(CONFIG_QRTR)		+= qrtr/
 obj-$(CONFIG_NET_NCSI)		+= ncsi/
 obj-$(CONFIG_RMNET_DATA) += rmnet_data/
 obj-$(CONFIG_RMNET_USB) += rmnet_usb/
+#ifdef OPLUS_FEATURE_WIFI_SLA
+obj-y                   	+= oplus_sla/
+#endif /* OPLUS_FEATURE_WIFI_SLA */
+
+OPLUS_FEATURE_WIFI_LUCKYMONEY = 1
+ifneq ($(OPLUS_FEATURE_WIFI_LUCKYMONEY),)
+obj-y				+= oplus_nf_hooks/
+endif #/* OPLUS_FEATURE_WIFI_LUCKYMONEY */
+
+OPLUS_FEATURE_DHCP = 1
+ifneq ($(OPLUS_FEATURE_DHCP),)
+obj-y				+= oplus_dhcp/
+endif #/* OPLUS_FEATURE_DHCP */
+
+#ifdef OPLUS_FEATURE_MODEM_DATA_NWPOWER
+#Add for classify glink wakeup services and count IPA wakeup.
+obj-y               += oplus_nwpower/
+#endif /* OPLUS_FEATURE_MODEM_DATA_NWPOWER */
+
+#ifdef VENDOR_EDIT
+obj-y				+= oplus_kernel2user/
+#endif /* VENDOR_EDIT */

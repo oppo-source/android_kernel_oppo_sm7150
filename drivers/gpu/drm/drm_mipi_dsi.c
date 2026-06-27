@@ -34,7 +34,7 @@
 #include <linux/slab.h>
 
 #include <video/mipi_display.h>
-
+#include "./msm/sde_dbg.h"
 /**
  * DOC: dsi helpers
  *
@@ -710,6 +710,7 @@ ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
 		/* concatenate the DCS command byte and the payload */
 		tx[0] = cmd;
 		memcpy(&tx[1], data, len);
+		SDE_EVT32(0x100, tx, size);
 	} else {
 		tx = &cmd;
 		size = 1;
@@ -717,8 +718,10 @@ ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
 
 	err = mipi_dsi_dcs_write_buffer(dsi, tx, size);
 
-	if (len > 0)
+	if (len > 0){
 		kfree(tx);
+		SDE_EVT32(0x200, tx, size);
+	}
 
 	return err;
 }
@@ -1055,7 +1058,10 @@ EXPORT_SYMBOL(mipi_dsi_dcs_set_tear_scanline);
 int mipi_dsi_dcs_set_display_brightness(struct mipi_dsi_device *dsi,
 					u16 brightness)
 {
-	u8 payload[2] = { brightness & 0xff, brightness >> 8 };
+//#ifdef OPLUS_BUG_STABILITY
+	//u8 payload[2] = { brightness & 0xff, brightness >> 8 };
+	u8 payload[2] = { brightness >> 8, brightness & 0xff };
+//#endif /* OPLUS_BUG_STABILITY */
 	ssize_t err;
 
 	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,

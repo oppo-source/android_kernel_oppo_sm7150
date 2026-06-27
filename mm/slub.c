@@ -40,6 +40,18 @@
 
 #include "internal.h"
 
+/* Enalbe slabtrace:
+ * CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG=y
+ * Get more info disable Randomize_base
+ * CONFIG_RANDOMIZE_BASE=n
+ * after add the config, cat /proc/slabtrace to get slab userinfo
+ */
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+#ifndef CONFIG_RANDOMIZE_BASE
+#define COMPACT_OPLUS_SLUB_TRACK
+#endif
+#endif
+
 /*
  * Lock order:
  *   1. slab_mutex (Global Mutex)
@@ -202,7 +214,14 @@ static inline bool kmem_cache_has_cpu_partial(struct kmem_cache *s)
 struct track {
 	unsigned long addr;	/* Called from address */
 #ifdef CONFIG_STACKTRACE
+#if defined(COMPACT_OPLUS_SLUB_TRACK)
+/* Store the offset after MODULES_VADDR for
+ * kernel module and kernel text address
+ */
+	u32 addrs[TRACK_ADDRS_COUNT];
+#else
 	unsigned long addrs[TRACK_ADDRS_COUNT];	/* Called from address */
+#endif
 #endif
 	int cpu;		/* Was running on cpu */
 	int pid;		/* Pid context */
@@ -460,7 +479,12 @@ static inline bool cmpxchg_double_slab(struct kmem_cache *s, struct page *page,
  * Node listlock must be held to guarantee that the page does
  * not vanish from under us.
  */
-static void get_map(struct kmem_cache *s, struct page *page, unsigned long *map)
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+void
+#else
+static void
+#endif
+get_map(struct kmem_cache *s, struct page *page, unsigned long *map)
 {
 	void *p;
 	void *addr = page_address(page);
@@ -468,6 +492,9 @@ static void get_map(struct kmem_cache *s, struct page *page, unsigned long *map)
 	for (p = page->freelist; p; p = get_freepointer(s, p))
 		set_bit(slab_index(p, s, addr), map);
 }
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+EXPORT_SYMBOL(get_map);
+#endif
 
 static inline int size_from_object(struct kmem_cache *s)
 {
@@ -566,6 +593,34 @@ static void set_track(struct kmem_cache *s, void *object,
 
 	if (addr) {
 #ifdef CONFIG_STACKTRACE
+#if defined(COMPACT_OPLUS_SLUB_TRACK)
+		unsigned long addrs[TRACK_ADDRS_COUNT];
+		struct stack_trace trace;
+		int i;
+
+		memset(addrs, 0, sizeof(addrs));
+		trace.nr_entries = 0;
+		trace.max_entries = TRACK_ADDRS_COUNT;
+
+		trace.entries = addrs;
+		trace.skip = 3;
+		save_stack_trace(&trace);
+
+		/* See rant in lockdep.c */
+		if (trace.nr_entries != 0 &&
+			trace.entries[trace.nr_entries - 1] == ULONG_MAX)
+			trace.nr_entries--;
+
+		for (i = trace.nr_entries; i < TRACK_ADDRS_COUNT; i++)
+			addrs[i] = 0;
+
+		for (i = 0; i < TRACK_ADDRS_COUNT; i++) {
+			if (addrs[i])
+				p->addrs[i] = addrs[i] - MODULES_VADDR;
+			else
+				p->addrs[i] = 0;
+		}
+#else
 		struct stack_trace trace;
 		int i;
 
@@ -584,6 +639,7 @@ static void set_track(struct kmem_cache *s, void *object,
 
 		for (i = trace.nr_entries; i < TRACK_ADDRS_COUNT; i++)
 			p->addrs[i] = 0;
+#endif
 #endif
 		p->addr = addr;
 		p->cpu = smp_processor_id();
@@ -610,6 +666,28 @@ static void print_track(const char *s, struct track *t)
 	pr_err("INFO: %s in %pS age=%lu cpu=%u pid=%d\n",
 	       s, (void *)t->addr, jiffies - t->when, t->cpu, t->pid);
 #ifdef CONFIG_STACKTRACE
+#if defined(COMPACT_OPLUS_SLUB_TRACK)
+	{
+		int i;
+		unsigned long addrs[TRACK_ADDRS_COUNT];
+
+		/* we store the offset after MODULES_VADDR for
+		 * kernel module and kernel text address
+		 */
+		for (i = 0; i < TRACK_ADDRS_COUNT; i++) {
+			if (t->addrs[i])
+				addrs[i] =  MODULES_VADDR + t->addrs[i];
+			else
+				addrs[i] = 0;
+		}
+		for (i = 0; i < TRACK_ADDRS_COUNT; i++) {
+			if (addrs[i])
+				pr_err("\t%pS\n", (void *)addrs[i]);
+			else
+				break;
+		}
+	}
+#else
 	{
 		int i;
 		for (i = 0; i < TRACK_ADDRS_COUNT; i++)
@@ -618,6 +696,7 @@ static void print_track(const char *s, struct track *t)
 			else
 				break;
 	}
+#endif
 #endif
 }
 
@@ -2392,10 +2471,18 @@ static bool has_cpu_slab(int cpu, void *info)
 	return c->page || slub_percpu_partial(c);
 }
 
-static void flush_all(struct kmem_cache *s)
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+void
+#else
+static void
+#endif
+flush_all(struct kmem_cache *s)
 {
 	on_each_cpu_cond(has_cpu_slab, flush_cpu_slab, s, 1, GFP_ATOMIC);
 }
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+EXPORT_SYMBOL(flush_all);
+#endif
 
 /*
  * Use the cpu notifier to insure that the cpu slabs are flushed when
@@ -4550,9 +4637,20 @@ static long validate_slab_cache(struct kmem_cache *s)
  * and freed.
  */
 
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+#define OPLUS_MEMCFG_SLABTRACE_CNT 4
+#if (OPLUS_MEMCFG_SLABTRACE_CNT > TRACK_ADDRS_COUNT)
+#error (OPLUS_MEMCFG_SLABTRACE_CNT > TRACK_ADDRS_COUNT)
+#endif
+#endif
 struct location {
 	unsigned long count;
 	unsigned long addr;
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+#ifdef CONFIG_STACKTRACE
+	unsigned long addrs[OPLUS_MEMCFG_SLABTRACE_CNT]; /* caller address */
+#endif
+#endif
 	long long sum_time;
 	long min_time;
 	long max_time;
@@ -4575,7 +4673,12 @@ static void free_loc_track(struct loc_track *t)
 			get_order(sizeof(struct location) * t->max));
 }
 
-static int alloc_loc_track(struct loc_track *t, unsigned long max, gfp_t flags)
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+int
+#else
+static int
+#endif
+alloc_loc_track(struct loc_track *t, unsigned long max, gfp_t flags)
 {
 	struct location *l;
 	int order;
@@ -4594,6 +4697,9 @@ static int alloc_loc_track(struct loc_track *t, unsigned long max, gfp_t flags)
 	t->loc = l;
 	return 1;
 }
+#if defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+EXPORT_SYMBOL(alloc_loc_track);
+#endif
 
 static int add_location(struct loc_track *t, struct kmem_cache *s,
 				const struct track *track)

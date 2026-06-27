@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/msm-bus.h>
 #include "dsi_clk.h"
+#include "sde_dbg.h"
 
 struct dsi_core_clks {
 	struct dsi_core_clk_info clks;
@@ -1178,6 +1179,8 @@ int dsi_clk_req_state(void *client, enum dsi_clk_type clk,
 	       mngr->name, c->name, clk, state, c->core_clk_state,
 	       c->link_clk_state);
 
+	SDE_EVT32(clk, state, c->core_refcount, c->core_clk_state,
+		 c->link_refcount, c->link_clk_state);
 	/*
 	 * Clock refcount handling as below:
 	 *	i. Increment refcount whenever ON is called.
@@ -1245,7 +1248,7 @@ int dsi_clk_req_state(void *client, enum dsi_clk_type clk,
 	pr_debug("[%s]%s: change=%d, Core (ref=%d, state=%d), Link (ref=%d, state=%d)\n",
 		 mngr->name, c->name, changed, c->core_refcount,
 		 c->core_clk_state, c->link_refcount, c->link_clk_state);
-
+	SDE_EVT32(changed, c->core_refcount, c->core_clk_state, c->link_refcount, c->link_clk_state);
 	if (changed) {
 		rc = dsi_recheck_clk_state(mngr);
 		if (rc)
